@@ -4,7 +4,7 @@ import json
 import math
 import os
 from pydantic import BaseModel, ValidationError
-from google import genai
+from gemini_service import client
 from google.genai.types import GenerateContentConfig, EmbedContentConfig
 from storage import (list_studies, get_study, cached_embeddings, save_embeddings)
 from get_summary import normalize_evidence
@@ -46,17 +46,11 @@ class WordGuide(BaseModel):
     cautions: list[str]
 
 
-def client():
-    key = os.getenv('GEMINI_API_KEY')
-    if not key:
-        raise ValueError('Add GEMINI_API_KEY to .env and restart Streamlit.')
-    return genai.Client(api_key=key)
-
-
 def generate_json(prompt, schema):
-    response = client().models.generate_content(
-        model=os.getenv('GEMINI_MODEL','gemini-3.5-flash'), contents=prompt,
-        config=GenerateContentConfig(response_mime_type='application/json',response_schema=schema))
+    with client() as connection:
+        response = connection.models.generate_content(
+            model=os.getenv('GEMINI_MODEL','gemini-3.5-flash'), contents=prompt,
+            config=GenerateContentConfig(response_mime_type='application/json',response_schema=schema))
     try:
         return schema.model_validate_json(response.text or '')
     except ValidationError:
@@ -72,9 +66,10 @@ def chunks(text, size=1500, overlap=150):
 def embed(texts, task):
     if not texts:
         return []
-    response = client().models.embed_content(
-        model=os.getenv('GEMINI_EMBEDDING_MODEL','gemini-embedding-001'), contents=texts,
-        config=EmbedContentConfig(task_type=task,output_dimensionality=768))
+    with client() as connection:
+        response = connection.models.embed_content(
+            model=os.getenv('GEMINI_EMBEDDING_MODEL','gemini-embedding-001'), contents=texts,
+            config=EmbedContentConfig(task_type=task,output_dimensionality=768))
     vectors = [e.values for e in response.embeddings or []]
     if len(vectors) != len(texts) or any(not v or any(not math.isfinite(x) for x in v) for v in vectors):
         raise ValueError('The embedding service returned incomplete vectors. Please try again.')

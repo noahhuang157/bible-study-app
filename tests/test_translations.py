@@ -6,7 +6,7 @@ from translations import parse_content,choose_bible,fetch_chapter,request_json
 from bible_reader import load_reading
 from storage import saved_payload
 from word_study import database_path,search_entries,passage_material
-from word_explanation import generate_word_meaning,ClearWordMeaning
+from word_explanation import generate_word_meaning,ClearWordMeaning,MeaningEvidence
 
 CONTENT=[{'name':'para','type':'tag','attrs':{'style':'p'},'items':[{'name':'verse','attrs':{'number':'9'}},{'type':'text','text':'A synthetic verse about testimony. ','attrs':{'verseId':'JHN.15.9'}},{'name':'char','items':[{'type':'text','text':'Its sentence continues.'}]}]}]
 CATALOG=[{'id':'edition-1','abbreviation':'NIV','language':{'id':'eng'},'copyright':'Synthetic copyright'}]
@@ -59,7 +59,7 @@ class TranslationTests(unittest.TestCase):
         entry=search_entries('G3144')[0][0]
         material=passage_material('Acts 1:8',entry)
         result={'entry':entry,'passage_data':material}
-        guide=ClearWordMeaning(plain_meaning='A person who gives testimony to what they know or have experienced.',contextual_meaning='The sentence assigns the disciples a role in testifying.',why_this_meaning='It connects their testimony with the promised power.',other_senses=[],caution='This use does not by itself mean dying for the testimony.',references=['Acts 1:8','Lexical entry'])
+        guide=ClearWordMeaning(plain_meaning='A person who gives testimony to what they know or have experienced.',contextual_meaning='The sentence assigns the disciples a role in testifying.',why_this_meaning='It connects their testimony with the promised power.',other_senses=[],caution='This use does not by itself mean dying for the testimony.',references=['Acts 1:8','Lexical entry'],evidence=[MeaningEvidence(reference='Acts 1:8',quote=material['selected'][0]['text'])])
         with patch('word_explanation.generate_json',return_value=guide) as generate:
             meaning=generate_word_meaning(result);self.assertGreater(len(meaning['plain_meaning']),40);self.assertIn('witness',generate.call_args.args[0])
             guide.references=['Invented 99:1']

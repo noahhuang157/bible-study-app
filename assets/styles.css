@@ -95,3 +95,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 @media (max-width:720px) {
     .st-key-memory-stats [data-testid="stColumn"] { width: calc(50% - .5rem) !important; flex: 1 1 calc(50% - .5rem) !important; }
 }
+
+/* Original-word alignment: highlight the attested token and its own gloss together. */
+.aligned-verse { display: flex; flex-wrap: wrap; gap: .45rem; align-items: stretch; padding: .6rem 0; }
+.aligned-token { display: flex; flex-direction: column; justify-content: space-between; gap: .4rem; padding: .55rem .65rem; border: 1px solid #DCE2DA; border-radius: 8px; background: #FFFDF9; color: #263D32; max-width: 100%; }
+mark.aligned-token { background: #FFF0AF; border: 2px solid #917020; font-weight: 700; }
+.aligned-original { font-family: Georgia,serif; font-size: 1.2rem; overflow-wrap: anywhere; }
+.aligned-gloss { font-family: system-ui,sans-serif; font-size: .83rem; overflow-wrap: anywhere; }

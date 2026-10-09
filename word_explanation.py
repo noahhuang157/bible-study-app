@@ -2,6 +2,7 @@
 import json
 from pydantic import BaseModel, Field
 from advanced_study import generate_json
+from get_summary import normalize_evidence
 from word_study import clean, occurrences
 
 class ExplanationSection(BaseModel):
@@ -66,6 +67,10 @@ SOURCE DATA:\n'''+json.dumps(sources,ensure_ascii=False)
     markdown+='\n\n## Questions for further study\n\n'+'\n'.join('- '+q for q in guide.questions)
     return {'sections':guide.model_dump(),'markdown':markdown,'source_edition':material['edition'],'translation':material['translation']}
 
+class MeaningEvidence(BaseModel):
+    reference: str
+    quote: str
+
 class ClearWordMeaning(BaseModel):
     plain_meaning: str = Field(min_length=40)
     contextual_meaning: str
@@ -73,6 +78,9 @@ class ClearWordMeaning(BaseModel):
     other_senses: list[str]
     caution: str
     references: list[str]
+    simple_example: str = ''
+    key_distinction: str = ''
+    evidence: list[MeaningEvidence] = Field(default_factory=list)
 
 
 def generate_word_meaning(result):
@@ -80,11 +88,19 @@ def generate_word_meaning(result):
     entry=result['entry'];material=result.get('passage_data',{})
     definition=clean(entry.get('definition',''))
     examples=occurrences(entry,limit=5)['verses']
+    if material.get('matches'):
+        nearby=occurrences(entry,book=material['matches'][0]['book'],limit=5)['verses']
+        examples=list({r['reference']:r for r in examples+nearby}.values())
     allowed={'Lexical entry'}|{r['reference'] for r in examples}|{r['reference'] for r in material.get('chapter',[])}
-    data={'lexical_entry':{**entry,'definition':definition},'passage':material,'examples_WEB':examples}
+    data={'reader_question':result.get('reader_question',''),'lexical_entry':{**entry,'definition':definition},'passage':material,'examples_WEB':examples}
     prompt='''Explain the selected ORIGINAL-LANGUAGE word clearly to a beginner using ONLY the
 supplied lexical entry and Bible text. The short gloss may simply repeat an English query
 such as "witness"; expand the concept instead of repeating that word or listing synonyms.
+Use everyday language. Define technical terms immediately if they are necessary.
+Address reader_question if present. Prefer short sentences over abstract theological labels.
+Explain what a person DOES, what an action INVOLVES, or what a quality LOOKS LIKE, as
+appropriate to the noun/verb/adjective. Do not explain an unfamiliar word using another
+unexplained word such as "attestation", "propitiation", or "imputation".
 plain_meaning: 2-4 accessible sentences explaining what the word refers to, its function,
 and the distinction from nearby concepts where the sources support it. Do not define a
 noun as a verb or confuse testimony with the person giving it. Do not automatically equate
@@ -97,6 +113,14 @@ caution. Never invent a verse-level identification or claim English-word alignme
 other_senses: up to three alternative senses explicitly supported by the lexical entry,
 clearly distinct from the current contextual sense; use an empty list if insufficient.
 caution: a specific interpretive boundary or ambiguity, not a generic disclaimer.
+simple_example: one short, clearly labeled everyday illustration of the lexical sense,
+not a Bible quotation, doctrinal claim, or proposed historical event. Leave it empty if
+an illustration would distort the word or the source is too limited.
+key_distinction: a helpful, source-supported distinction that prevents misunderstanding;
+leave it empty if none is supported. Separate literal, figurative, and contextual senses.
+evidence: 1-4 objects with reference and a short exact quote from the corresponding
+supplied lexical entry or Bible text. Include selected-passage evidence when giving a
+contextual_meaning. Quote the supplied text exactly, never your own paraphrase.
 references: one or more exact labels from supplied Bible rows or "Lexical entry".
 Do not add external references, fabricated definitions, quotes, roots, morphology, or
 theology. If the available sources cannot establish a richer definition, say what is
@@ -105,4 +129,19 @@ SOURCE DATA:\n'''+json.dumps(data,ensure_ascii=False)
     guide=generate_json(prompt,ClearWordMeaning)
     if not guide.references or any(r not in allowed for r in guide.references):raise ValueError('The clear definition cited a source outside the supplied material. Try again.')
     if (not material.get('verified') or not material.get('selected')) and (guide.contextual_meaning.strip() or guide.why_this_meaning.strip()):raise ValueError('The definition claimed a passage meaning without verified passage evidence.')
-    return {**guide.model_dump(),'translation':material.get('translation','No passage supplied')}
+    if len(guide.plain_meaning.split())<12 or len(set(normalize_evidence(guide.plain_meaning).split()))<8:
+        raise ValueError('The explanation was too brief or repetitive to clarify the word. Try again with a passage or a specific question.')
+    source_text={'Lexical entry':[definition,clean(entry.get('short_definition',''))]}
+    for row in examples+material.get('chapter',[])+material.get('selected',[]):
+        source_text.setdefault(row['reference'],[]).append(row['text'])
+    if not guide.evidence:
+        raise ValueError('The explanation supplied no checkable source excerpts. Please try again.')
+    for evidence in guide.evidence:
+        quote=normalize_evidence(evidence.quote)
+        if not quote or not any(quote in normalize_evidence(t) for t in source_text.get(evidence.reference,[])):
+            raise ValueError('The explanation included an excerpt not found in its supplied source. Please try again.')
+    if guide.contextual_meaning.strip():
+        selected_refs={r['reference'] for r in material.get('selected',[])}
+        if not any(e.reference in selected_refs for e in guide.evidence):
+            raise ValueError('The passage meaning was missing evidence from your selected verse(s). Please try again.')
+    return {**guide.model_dump(),'translation':material.get('translation','No passage supplied'),'meaning_version':2}

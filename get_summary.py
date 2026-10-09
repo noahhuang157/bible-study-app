@@ -1,11 +1,10 @@
 from transcript import get_transcript
 import os
 from dotenv import load_dotenv
-from google import genai
+from gemini_service import client
 
 load_dotenv()
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 
 def get_video_id(youtube_link):
@@ -41,16 +40,16 @@ def build_prompt(text, format_choice):
 def call_gemini(prompt):
     from google.genai.types import GenerateContentConfig
     from study_models import SermonStudy
-    if not GEMINI_API_KEY:
-        raise ValueError("Add GEMINI_API_KEY to your .env file, then restart Streamlit.")
-    client = genai.Client(api_key=GEMINI_API_KEY)
-    response = client.models.generate_content(
-        model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
-        contents=prompt,
-        config=GenerateContentConfig(
-            response_mime_type="application/json", response_schema=SermonStudy,
-        ),
-    )
+    if not os.getenv("GEMINI_API_KEY"):
+        raise ValueError("Add GEMINI_API_KEY in Streamlit Settings → Secrets (hosted), or .env (local), then restart the app.")
+    with client() as connection:
+        response = connection.models.generate_content(
+            model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
+            contents=prompt,
+            config=GenerateContentConfig(
+                response_mime_type="application/json", response_schema=SermonStudy,
+            ),
+        )
     if not response.text:
         raise ValueError("The model returned no study notes. Try again or check your Gemini model setting.")
     return response.text
@@ -129,8 +128,8 @@ def get_sermon_study(youtube_link, format_choice):
     if format_choice not in ("1", "2"):
         raise ValueError("Choose Structured Notes or Inductive Study.")
     video_id = get_video_id(youtube_link)
-    if not GEMINI_API_KEY:
-        raise ValueError("Add GEMINI_API_KEY to your .env file, then restart Streamlit.")
+    if not os.getenv("GEMINI_API_KEY"):
+        raise ValueError("Add GEMINI_API_KEY in Streamlit Settings → Secrets (hosted), or .env (local), then restart the app.")
     text = get_transcript(video_id)
     if not text.strip():
         raise ValueError("No transcript was found for this video.")

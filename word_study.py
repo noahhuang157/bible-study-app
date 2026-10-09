@@ -132,7 +132,7 @@ def passage_material(passage,entry,translation="WEB"):
             'copyright':reading.get('copyright',''),'provider':reading.get('provider',''),
             'provider_meta':reading.get('provider_meta',{}),'selected':reading['selected'],'chapter':reading['chapter'],'matches':matches,'verified':bool(matches),'edition':'STEP TAGNT / NA28' if book>39 else 'STEP TAHOT primary L/Q/R','matching_scope':'extended lexical ID' if lemma else 'Strong’s number (legacy study; may group distinct words)'}
 
-def occurrences(entry,book=None,offset=0,limit=20):
+def occurrences(entry,book=None,offset=0,limit=20,aligned=False):
     lemma=entry.get('lemma_id');base=entry['topic'][0]+entry['topic'][1:].zfill(4)
     field,value=('lemma',lemma) if lemma else ('base',base)
     condition=f'g.{field}=?';params=[value]
@@ -145,7 +145,16 @@ def occurrences(entry,book=None,offset=0,limit=20):
         previews=[]
         for row in rows:
             verse=db.execute('SELECT text FROM verses WHERE book=? AND chapter=? AND verse=?',(row['book'],row['chapter'],row['verse'])).fetchone()
-            previews.append({**dict(row),'reference':reference(row['book'],row['chapter'],row['verse']),'text':verse[0] if verse else 'No WEB preview for this STEP reference.'})
+            aligned_rows=[]
+            if aligned:
+                tokens=db.execute(f'''SELECT t.id,t.position,t.surface,t.gloss,t.transliteration,
+                    EXISTS(SELECT 1 FROM tags g WHERE g.token_id=t.id AND g.{field}=?) matched
+                    FROM tokens t WHERE t.book=? AND t.chapter=? AND t.verse=? ORDER BY t.id''',
+                    [value,row['book'],row['chapter'],row['verse']]).fetchall()
+                aligned_rows=[{**dict(t),'matched':bool(t['matched'])} for t in tokens]
+            previews.append({**dict(row),'reference':reference(row['book'],row['chapter'],row['verse']),
+                'text':verse[0] if verse else 'No WEB preview for this STEP reference.',
+                'aligned_tokens':aligned_rows})
     return {'tokens':total,'verse_count':count,'books':books,'verses':previews,'scope':'extended lexical ID' if lemma else 'Strong’s number (legacy)'}
 
 def greek_morphology(code):

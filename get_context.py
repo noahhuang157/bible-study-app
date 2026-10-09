@@ -2,12 +2,11 @@
 import os
 from urllib.parse import urlparse
 from dotenv import load_dotenv
-from google import genai
+from gemini_service import client
 from google.genai.types import GenerateContentConfig
 from prompts.context import build_context_prompt
 
 load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 
 def bible_passage(passage):
@@ -41,14 +40,14 @@ def retrieved_sources(response):
 
 
 def call_gemini(prompt, source_url=""):
-    if not GEMINI_API_KEY:
-        raise ValueError("Add GEMINI_API_KEY to your .env file, then restart Streamlit.")
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    if not os.getenv("GEMINI_API_KEY"):
+        raise ValueError("Add GEMINI_API_KEY in Streamlit Settings → Secrets (hosted), or .env (local), then restart the app.")
     config = GenerateContentConfig(tools=[{"url_context": {}}]) if source_url else GenerateContentConfig()
-    response = client.models.generate_content(
-        model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
-        contents=prompt, config=config,
-    )
+    with client() as connection:
+        response = connection.models.generate_content(
+            model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
+            contents=prompt, config=config,
+        )
     if not response.text or not response.text.strip():
         raise ValueError("No passage context was returned. Please try again.")
     return {"text": response.text, "sources": retrieved_sources(response)}

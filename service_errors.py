@@ -30,11 +30,16 @@ def describe_error(error):
         if error.response is not None:
             code = error.response.status_code
         # requests errors may embed query strings carrying the SerpAPI key.
+    elif isinstance(error, RuntimeError):
+        message = redact_message(str(error))
+        if 'client' in message.casefold() and 'closed' in message.casefold(): service = 'Gemini client lifecycle'
     lower = message.casefold()
-    if code in (401, 403) or "api key not valid" in lower or "api_key_invalid" in lower:
-        guidance = "The provider rejected the request's credentials or permissions. Check the matching API key in .env and restart Streamlit. For Gemini, confirm this is a Gemini API key and the project has API access."
+    if isinstance(error, RuntimeError) and 'client' in lower and 'closed' in lower:
+        guidance = 'The AI connection closed before the request completed. Update to the client-lifecycle fix, then reboot the app. This error does not establish that your key or quota is invalid.'
+    elif code in (401, 403) or "api key not valid" in lower or "api_key_invalid" in lower:
+        guidance = "The provider rejected the request's credentials or permissions. Check the matching API key in Streamlit Settings → Secrets (hosted) or .env (local), then restart the app. For Gemini, confirm this is a Gemini API key and the project has API access."
     elif code == 404:
-        guidance = "The requested model or resource was not found. If this is Gemini, check GEMINI_MODEL in .env against the model names available to your account, then restart Streamlit."
+        guidance = "The requested model or resource was not found. If this is Gemini, check GEMINI_MODEL in Streamlit Secrets or .env against the model names available to your account, then restart Streamlit."
     elif code == 429:
         guidance = "The provider reports a rate or quota limit. Check the project's usage and limits. A short-term rate limit may clear after waiting; an exhausted quota needs a quota reset or account change."
     elif code == 400:
@@ -51,7 +56,7 @@ def describe_error(error):
     if code is not None:
         details += f"\nHTTP status: {code}"
     if message:
-        details += f"\nProvider message: {message}"
+        details += f"\nError message: {message}"
     model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
     if re.fullmatch(r"[A-Za-z0-9./_-]{1,100}", model):
         details += f"\nConfigured Gemini model: {redact_message(model)}"

@@ -3,6 +3,7 @@ import math
 import os
 import streamlit as st
 from word_study import (clean, search_entries, passage_material, occurrences, greek_morphology)
+from word_alignment import aligned_html
 from word_explanation import generate_word_explanation,generate_word_meaning
 from translation_ui import translation_picker,show_attribution
 from design import page_intro, empty_state
@@ -116,6 +117,19 @@ if result:
             if summary.get('other_senses'):
                 with st.expander('Other possible senses—not all apply here'):
                     for sense in summary['other_senses']:st.write('• '+sense)
+            if summary.get('simple_example'):
+                st.markdown('**In everyday terms · an illustration**')
+                st.write(summary['simple_example'])
+            if summary.get('key_distinction'):
+                st.markdown('**A helpful distinction**')
+                st.write(summary['key_distinction'])
+            if summary.get('evidence'):
+                with st.expander('Check the wording in the sources'):
+                    for evidence in summary['evidence']:
+                        st.write(evidence['reference']);st.write(evidence['quote'])
+                    st.caption('Excerpts are checked against supplied source text. This does not independently verify the interpretation.')
+            if summary.get('meaning_version',0)<2:
+                st.caption('Saved explanation from an earlier version. Explain this word clearly again to use the new clarity and source checks.')
             st.caption(summary['caution'])
             st.caption('Evidence: '+', '.join(summary['references']))
         elif result.get('word_explanation',{}).get('sections',{}).get('meaning'):
@@ -127,12 +141,13 @@ if result:
                 st.markdown('**From the lexical source**')
                 st.write(definition_preview[:1000]+('…' if len(definition_preview)>1000 else ''))
             else:st.info('Only a brief glossary is available for this entry. Add a passage to establish its specific use.')
+        clarification=st.text_input('What is unclear about the meaning? (optional)',placeholder='For example: What does this word mean in everyday language?',max_chars=1500,key='meaning_question_'+identity)
         if st.button('Explain this word clearly →',key='clear_meaning_'+identity):
             try:
-                with st.spinner('Explaining the word and its context…'):result['meaning_summary']=generate_word_meaning(result)
+                with st.spinner('Explaining the word and its context…'):result['meaning_summary']=generate_word_meaning({**result,'reader_question':clarification})
                 persist_result('word_result',result);st.rerun()
             except ValueError as error:st.warning(str(error))
-            except Exception as error:show_service_error(error)
+            except Exception as error:show_service_error(error,has_previous=bool(result.get('meaning_summary')))
         with st.expander('Short dictionary gloss'):st.write(clean(entry.get('short_definition')))
         st.caption('This is a dictionary gloss. The sentence and surrounding argument determine the sense in a specific passage.')
         if entry.get('grammar'):st.write('Dictionary grammar: '+entry['grammar'])
@@ -199,7 +214,7 @@ if result:
         st.subheader('Where this word occurs')
         try:
             all_uses=occurrences(entry,limit=0)
-            st.caption('Verified from STEP original-word tags; previews use WEB. Counts use the selected extended lexical ID and edition. These are word occurrences; related themes may use different words.')
+            st.caption('Highlighted words are verified by the selected Greek/Hebrew lexical ID. The aligned view pairs each original token with its STEP English gloss, so a different English rendering still follows the same original word. The separate WEB reading is not word-aligned.')
             c1,c2,c3=st.columns(3)
             c1.metric('Word occurrences',all_uses['tokens']);c2.metric('Verses',all_uses['verse_count']);c3.metric('Books',len(all_uses['books']))
             options=[None]+[r['book'] for r in all_uses['books']]
@@ -208,12 +223,16 @@ if result:
             count=next((r['verses'] for r in all_uses['books'] if r['book']==book),all_uses['verse_count'])
             pages=max(1,math.ceil(count/15))
             page=st.number_input('Results page',min_value=1,max_value=pages,value=1,step=1,key='occurrence_page_'+identity+'_'+str(book))
-            rows=occurrences(entry,book=book,offset=(page-1)*15,limit=15)
+            rows=occurrences(entry,book=book,offset=(page-1)*15,limit=15,aligned=True)
             st.caption(f"Page {page} of {pages} · {count} verses")
             for row in rows['verses']:
                 with st.container(border=True):
                     st.markdown(f"**{row['reference']}**")
-                    st.write(row['text']);st.caption('Original form(s): '+row['forms'])
+                    st.markdown(aligned_html(row['aligned_tokens'],hebrew=entry['topic'].startswith('H')),unsafe_allow_html=True)
+                    st.caption('Highlighted: selected original word and its linked source gloss. Source word order; glosses are study aids, not a prose Bible translation. Hebrew matches can concern one component of a word.')
+                    with st.expander('Read this verse in WEB'):
+                        st.write(row['text'])
+                    st.caption('Original form(s): '+row['forms'])
                     if st.button('Study this passage →',key=f"occurrence_{identity}_{row['book']}_{row['chapter']}_{row['verse']}"):
                         open_passage(row['reference'],source_label='Word occurrences')
             if not rows['verses']:st.info('No occurrences for this entry in the bundled edition.')
@@ -229,6 +248,9 @@ if result:
             summary=result['meaning_summary']
             notes+='\n\n## Plain-language meaning\n\n'+summary['plain_meaning']
             if summary.get('contextual_meaning'):notes+='\n\n## Meaning in this passage\n\n'+summary['contextual_meaning']+'\n\n'+summary['why_this_meaning']
+            if summary.get('simple_example'):notes+='\n\n## Everyday illustration\n\n'+summary['simple_example']
+            if summary.get('key_distinction'):notes+='\n\n## A helpful distinction\n\n'+summary['key_distinction']
+            if summary.get('evidence'):notes+='\n\n## Checked source excerpts\n\n'+'\n\n'.join(e['reference']+': '+e['quote'] for e in summary['evidence'])
             notes+='\n\n'+summary.get('caution','')+'\n\nEvidence: '+', '.join(summary['references'])
         if result.get('passage_data',{}).get('selected'):
             notes+='\n\n## Selected passage ('+result['passage_data'].get('translation_code','WEB')+')\n\n'+'\n\n'.join(f"{r['reference']}: {r['text']}" for r in result['passage_data']['selected'])

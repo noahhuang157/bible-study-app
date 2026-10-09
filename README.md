@@ -2,6 +2,25 @@
 
 A personal Bible study workspace with saved studies, source-based transcript questions, semantic search, topic exploration, and lexical guidance.
 
+## Word study fixes and AI request reliability
+
+Gemini generation and embedding requests now hold a fresh client open until the request finishes. The previous temporary-client pattern could close its HTTP connection before sending anything, producing an immediate `RuntimeError: Cannot send a request, as the client has been closed.` This affected several study tools. Runtime diagnostics now include the actual error, with credentials and URLs redacted, and failed requests preserve the previous result.
+
+**Other occurrences** now displays source-aligned original words and English glosses, highlighting every token tagged with the selected lexical ID. This follows Greek/Hebrew identity even when the gloss differs, rather than matching the English search term. Greek inflections and Hebrew tagged components are included. These STEP glosses follow source word order; they are not a polished English Bible translation. WEB prose is available separately in each verse's expander and remains unhighlighted because the bundled WEB text has no word-level alignment. Selected modern Bible versions are likewise not mapped to original tokens by this feature.
+
+**Explain this word clearly** accepts an optional question about what is unclear. New explanations include an everyday illustration and a helpful distinction when the sources support them. The app rejects very short/repetitive definitions, requires source excerpts, and checks each excerpt against supplied lexical or verse text. Passage-specific meanings require evidence from the selected verse. These checks verify quoted evidence, not every interpretive claim. Regenerate older saved explanations to use the new checks.
+
+### Update your existing GitHub / Streamlit deployment
+
+1. Extract `bible-study-github-update.zip`. Copy its files and folders into your existing repository, preserving paths and replacing the corresponding files. Include the new `gemini_service.py` and `word_alignment.py` files. The update ZIP excludes `translations.py`, so your chosen translation options stay intact.
+2. Commit and push the changes, or upload the extracted files/folders with GitHub's **Add file → Upload files**. Upload the code, not the ZIP. File paths should match your existing repository layout (for example, `pages/word_study_page.py`).
+3. Streamlit Community Cloud normally updates from the configured branch. If it keeps running the old code, reboot the app from its dashboard. Your existing keys remain in the app's Secrets settings; this update needs no new key or service.
+4. Open Word Study, select a word and passage, and press **Explain this word clearly** to replace any older explanation. Inspect an occurrence's highlighted source words and glosses.
+
+The full `bible-study-word-fixes.zip` is also available for a fresh local installation. If using it to replace an existing project, retain your translation customizations, local `.env`, and data-directory setting.
+
+Validation: 38 unit tests plus a Streamlit interaction check passed. The real Gemini SDK was exercised with a mocked HTTP transport for generation and embeddings, verifying that requests reach the transport and clients close afterward. Live provider responses with your API keys were not tested.
+
 ## New: a calmer interface and verse memorization
 
 The interface now has grouped navigation (Start, Study, Practice, Your library), a personalized home screen, a daily review shortcut, more comfortable controls, visible keyboard focus, responsive practice cards, horizontally scrollable tabs, and reduced-motion support. Existing passage, word, sermon, topic, search, and notes tools remain available.
